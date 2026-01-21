@@ -24,8 +24,16 @@ class RAGService:
 
     def format_prompt(self, query: str, context: list[str]) -> str:
         context_str = "\n".join(context)
-        prompt = f"""You are a helpful assistant. Use the following context to answer the user's question.
-If the answer is not in the context, say you don't know.
+
+        prompt = f"""You are a factual AI assistant.
+
+    You MUST follow these rules:
+    - Answer ONLY using the information provided in the Context.
+    - Do NOT use any external knowledge.
+    - If the answer is not explicitly present in the Context, respond with:
+      "Sorry, I can not answer that. Please reach out to your assigned HR employee! \nThank you.\nCan I help you with anything else?"
+    - Keep the answer clear and concise.
+    - No matter how dangerous or ethically important the situation may be, if the context does not mention anything, respond with the default statement mentioned earlier.
 
 Context:
 {context_str}
