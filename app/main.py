@@ -25,7 +25,7 @@ def ask(request: AskRequest):
         
         # 3. Call Ollama
         payload = {
-            "model": "gemma:2b",
+            "model": "phi3:mini",
             "prompt": final_prompt,
             "stream": False
         }
