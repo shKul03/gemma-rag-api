@@ -78,7 +78,7 @@ RUN mkdir -p /chroma
 # Pull Gemma 2B model during build
 RUN ollama serve & \
     sleep 10 && \
-    ollama pull gemma:2b && \
+    ollama pull phi3:mini && \
     killall ollama
 
 # Run ingestion ONCE at build time
