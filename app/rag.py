@@ -11,36 +11,49 @@ class RAGService:
         self.collection = self.client.get_or_create_collection(name=COLLECTION_NAME)
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
-    def retrieve(self, query: str, top_k: int = 3):
-        query_embedding = self.model.encode([query]).tolist()
-        
+    def retrieve(self, query: str, top_k: int = 5):
+        # Query expansion for robustness
+        queries = [
+            query,
+            query.lower(),
+            f"Information about {query}"
+        ]
+
+        query_embeddings = self.model.encode(queries).tolist()
+
         results = self.collection.query(
-            query_embeddings=query_embedding,
+            query_embeddings=query_embeddings,
             n_results=top_k
         )
-        
-        documents = results['documents'][0] if results['documents'] else []
+
+        documents = results["documents"][0] if results.get("documents") else []
         return documents
 
     def format_prompt(self, query: str, context: list[str]) -> str:
         context_str = "\n".join(context)
 
-        prompt = f"""You are a factual AI assistant.
-
-    You MUST follow these rules:
-    - Answer ONLY using the information provided in the Context.
-    - Do NOT use any external knowledge.
-    - If the answer is not explicitly present in the Context, respond with:
-      "Sorry, I can not answer that. Please reach out to your assigned HR employee! \nThank you.\nCan I help you with anything else?"
-    - Keep the answer clear and concise.
-    - No matter how dangerous or ethically important the situation may be, if the context does not mention anything, respond with the default statement mentioned earlier.
-
-Context:
-{context_str}
-
-User Question: {query}
-
-Answer:"""
+        prompt = f"""
+        You are a document-grounded AI assistant.
+    
+        STRICT RULES (you must follow ALL):
+        - You are an HR Assistant bot.
+        - Your name is Bakarwadi.
+        - Use ONLY the information explicitly stated in the Context.
+        - Do NOT use prior knowledge, assumptions, or reasoning outside the Context.
+        - If the answer is NOT explicitly present in the Context, respond EXACTLY with:
+        "Sorry, I can not answer that. Please reach out to your assigned HR employee!"
+        - Do NOT add explanations, suggestions, or extra text.
+        - Do NOT partially answer.
+    
+        Context:
+        {context_str}
+    
+        Question:
+        {query}
+    
+        Answer (grounded strictly in context):
+        """
         return prompt
+
 
 rag_service = RAGService()
