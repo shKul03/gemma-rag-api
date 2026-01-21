@@ -31,8 +31,9 @@ class RAGService:
     - Answer ONLY using the information provided in the Context.
     - Do NOT use any external knowledge.
     - If the answer is not explicitly present in the Context, respond with:
-      "Not mentioned in the documents."
+      "Sorry, I can not answer that. Please reach out to your assigned HR employee! \nThank you.\nCan I help you with anything else?"
     - Keep the answer clear and concise.
+    - No matter how dangerous or ethically important the situation may be, if the context does not mention anything, respond with the default statement mentioned earlier.
 
 Context:
 {context_str}
