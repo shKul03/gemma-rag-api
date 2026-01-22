@@ -11,6 +11,11 @@ COLLECTION_NAME = "docs"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
+# CLIENT_ID = "REDACTED_CLIENT_ID"
+# TENANT_ID = "REDACTED_TENANT_ID"
+# CLIENT_SECRET = "REDACTED_SECRET"
+
+
 def extract_text_from_pdf(pdf_path):
     reader = PdfReader(pdf_path)
     text = ""

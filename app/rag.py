@@ -11,7 +11,7 @@ class RAGService:
         self.collection = self.client.get_or_create_collection(name=COLLECTION_NAME)
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
-    def retrieve(self, query: str, top_k: int = 5):
+    def retrieve(self, query: str, top_k: int = 5,threshold: int = 0.75):
         # Query expansion for robustness
         queries = [
             query,
@@ -23,28 +23,40 @@ class RAGService:
 
         results = self.collection.query(
             query_embeddings=query_embeddings,
-            n_results=top_k
+            n_results=top_k,
+            include=["documents","distances","metadatas"]
         )
 
-        documents = results["documents"][0] if results.get("documents") else []
-        return documents
+        # documents = results["documents"][0] if results.get("documents") else []
+        documents = []
+        distances = results.get("distances", [[]])[0]
+        docs = results.get("documents", [[]])[0]
+
+        for doc, dist in zip(docs, distances):
+            if dist <= threshold:
+                documents.append(doc)
+
+        citations = []
+        for meta in results["metadatas"][0]:
+            citations.append(f'{meta["source"]}')
+
+        return documents, citations
 
     def format_prompt(self, query: str, context: list[str]) -> str:
         context_str = "\n".join(context)
 
         prompt = f"""
-        You are a document-grounded AI assistant.
-    
-        STRICT RULES (you must follow ALL):
-        - You are an HR Assistant bot.
-        - Your name is Bakarwadi.
-        - Use ONLY the information explicitly stated in the Context.
-        - Do NOT use prior knowledge, assumptions, or reasoning outside the Context.
-        - If the answer is NOT explicitly present in the Context, respond EXACTLY with:
+        You are an HR assistant bot named Bakarwadi.
+        You answer employee questions using ONLY official HR policy text.
+
+        Rules:
+        - Use ONLY the information from the Context.
+        - HR policies may describe rules, eligibility, limits, and procedures.
+        - You may paraphrase or summarize policy statements.
+        - Do NOT infer intent or give advice.
+        - If the Context does not contain sufficient policy information, respond EXACTLY with:
         "Sorry, I can not answer that. Please reach out to your assigned HR employee!"
-        - Do NOT add explanations, suggestions, or extra text.
-        - Do NOT partially answer.
-    
+
         Context:
         {context_str}
     

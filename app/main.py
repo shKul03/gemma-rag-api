@@ -18,7 +18,7 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 def ask(request: AskRequest):
     try:
         # 1. Retrieve context
-        context = rag_service.retrieve(request.prompt)
+        context, citations = rag_service.retrieve(request.prompt)
         
         # 2. Format prompt
         final_prompt = rag_service.format_prompt(request.prompt, context)
@@ -32,11 +32,11 @@ def ask(request: AskRequest):
         
         response = requests.post(OLLAMA_URL, json=payload)
         response.raise_for_status()
-        
+        cit = ' '.join(citations)
         result = response.json()
         model_response = result.get("response", "")
-        
-        return AskResponse(response=model_response)
+        final_response = model_response + "\n\nYou can refer: " + cit
+        return AskResponse(response=final_response)
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
