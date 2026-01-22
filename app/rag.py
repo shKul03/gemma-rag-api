@@ -51,6 +51,28 @@ class RAGService:
 
         return documents, citations
 
+    def retrieve_all_documents(self):
+        """
+        Retrieves the entire document corpus from Chroma.
+        Intended for full-context RAG evaluation only.
+        """
+
+        logger.info("Retrieving ALL documents from Chroma")
+
+        results = self.collection.get(
+            include=["documents", "metadatas"]
+        )
+
+        documents = results.get("documents", [])
+        metadatas = results.get("metadatas", [])
+
+        citations = []
+        for meta in metadatas:
+            citations.append(meta.get("source"))
+
+        logger.info(f"Total documents retrieved: {len(documents)}")
+        return documents, citations
+
     # def format_prompt(self, query: str, context: list[str]) -> str:
     #     context_str = "\n".join(context)
     #
