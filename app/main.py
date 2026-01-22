@@ -2,7 +2,12 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 import json
+import logging
 from app.rag import rag_service
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -17,8 +22,11 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest):
     try:
+        logger.info(f"Received question: {request.prompt}")
+        
         # 1. Retrieve context
         context, citations = rag_service.retrieve(request.prompt)
+        logger.info(f"Context {context}, citations {citations} retrieved, calling LLM...")
         
         # 2. Format prompt
         final_prompt = rag_service.format_prompt(request.prompt, context)
@@ -32,6 +40,7 @@ def ask(request: AskRequest):
         
         response = requests.post(OLLAMA_URL, json=payload)
         response.raise_for_status()
+        logger.info("LLM response received")
         cit = ' '.join(citations)
         result = response.json()
         model_response = result.get("response", "")
@@ -39,6 +48,7 @@ def ask(request: AskRequest):
         return AskResponse(response=final_response)
         
     except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
