@@ -99,6 +99,6 @@ def ingest_pdf(pdf_path: str):
     print(f"✅ Added {len(chunks)} chunks")
 
 
-if __name__ == "__main__":
-    ingest_pdf("data/sample_hr_policy.pdf")
-    print("Total vectors in DB:", collection.count())
+# if __name__ == "__main__":
+#     ingest_pdf("data/sample_hr_policy.pdf")
+#     print("Total vectors in DB:", collection.count())

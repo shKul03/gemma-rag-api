@@ -22,9 +22,9 @@ def retrieve_context(query: str, k: int = 5) -> str:
     docs = results.get("documents", [[]])[0]
     return "\n\n".join(docs)
 
-if __name__ == "__main__":
-    q = "maternity leave policy"
-    ctx = retrieve_context(q)
-
-    print("\n--- RETRIEVED CONTEXT ---\n")
-    print(ctx if ctx else "❌ No context returned")
+# if __name__ == "__main__":
+#     q = "maternity leave policy"
+#     ctx = retrieve_context(q)
+#
+#     print("\n--- RETRIEVED CONTEXT ---\n")
+#     print(ctx if ctx else "❌ No context returned")
