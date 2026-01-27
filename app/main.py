@@ -30,18 +30,22 @@ def call_phi3(prompt: str) -> str:
     response.raise_for_status()
 
     result = response.json()
-    logger.info(f"Response from {MODEL_NAME} : {result}")
+    logger.info(f"Received response from {MODEL_NAME}")
     return result.get("response", "").strip()
 
 # ---------------- API ----------------
 
 @app.post("/ask")
 def ask(question: str = Body(..., embed=True)):
-    logger.info(f"Recieved ASK request: {question}")
+    if question:
+        logger.info(f"Received ASK request")
+    else:
+        logger.warning("Question parameter is None type")
+        return {"answer": "Enter Non-Null Question"}
     try:
         # Retrieve RAG context
         context = retrieve_context(question)
-        logger.info(f"Context recieved: {context}")
+        logger.info("Context received")
 
         if not context.strip():
             logger.warning(f"No context received: {context}")
