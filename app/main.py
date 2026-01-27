@@ -60,6 +60,7 @@ STRICT RULES:
 - If the answer is not present, reply exactly: NOT FOUND IN CONTEXT.
 - Do not use outside knowledge.
 - Do not guess.
+- Your name is Bakarwadi
 
 Context:
 {context}
