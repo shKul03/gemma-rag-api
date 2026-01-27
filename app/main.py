@@ -1,56 +1,29 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import requests
-import json
-import logging
-from app.rag import rag_service
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from fastapi import FastAPI
+from rag import retrieve_context
 
 app = FastAPI()
 
-class AskRequest(BaseModel):
-    prompt: str
 
-class AskResponse(BaseModel):
-    response: str
+@app.post("/ask")
+def ask(question: str):
+    context = retrieve_context(question)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+    if not context.strip():
+        return {"answer": "NOT FOUND IN CONTEXT"}
 
-@app.post("/ask", response_model=AskResponse)
-def ask(request: AskRequest):
-    try:
-        logger.info(f"Received question: {request.prompt}")
-        
-        # 1. Retrieve context
-        context, citations = rag_service.retrieve(request.prompt)
-        logger.info(f"Context {context}, citations {citations} retrieved, calling LLM...")
-        
-        # 2. Format prompt
-        final_prompt = rag_service.format_prompt(request.prompt, context)
-        
-        # 3. Call Ollama
-        payload = {
-            "model": "phi3:mini",
-            "prompt": final_prompt,
-            "stream": False
-        }
-        
-        response = requests.post(OLLAMA_URL, json=payload)
-        response.raise_for_status()
-        logger.info("LLM response received")
-        cit = ' '.join(citations)
-        result = response.json()
-        model_response = result.get("response", "")
-        final_response = model_response + "\n\nYou can refer: " + cit
-        return AskResponse(response=final_response)
-        
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    prompt = f"""
+You are an HR policy assistant.
+Answer ONLY using the context below.
+If the answer is not present, say "NOT FOUND IN CONTEXT".
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+Context:
+{context}
+
+Question:
+{question}
+"""
+
+    # 🔁 Call Phi-3 here (wherever you do it)
+    answer = call_phi3(prompt)
+
+    return {"answer": answer}

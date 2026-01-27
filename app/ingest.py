@@ -1,88 +1,104 @@
 import os
-import chromadb
-from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+import re
 from pypdf import PdfReader
+from pdf2image import convert_from_path
+import pytesseract
 
-# Configuration
-DATA_DIR = "data"
+import chromadb
+from sentence_transformers import SentenceTransformer
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# ---------------- CONFIG ----------------
 CHROMA_DIR = "chroma"
 COLLECTION_NAME = "docs"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
+EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 
-# CLIENT_ID = "REDACTED_CLIENT_ID"
-# TENANT_ID = "REDACTED_TENANT_ID"
-# CLIENT_SECRET = "REDACTED_SECRET"
+# ----------------------------------------
+
+embedder = SentenceTransformer(EMBED_MODEL_NAME)
+client = chromadb.PersistentClient(path=CHROMA_DIR)
+collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
 
-def extract_text_from_pdf(pdf_path):
+# ----------- TEXT EXTRACTION ------------
+
+def extract_text_pypdf(pdf_path: str) -> str:
     reader = PdfReader(pdf_path)
-    text = ""
+    text = []
+
     for page in reader.pages:
-        text += page.extract_text() + "\n"
-    return text
+        t = page.extract_text()
+        if t:
+            text.append(t)
 
-def split_text(text, chunk_size, overlap):
-    chunks = []
-    start = 0
-    text_len = len(text)
+    return "\n".join(text)
 
-    while start < text_len:
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
-    
-    return chunks
 
-def ingest_data():
-    print("Starting ingestion...")
-    
-    # Initialize ChromaDB
-    client = chromadb.PersistentClient(path=CHROMA_DIR)
-    
-    # Create or get collection
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
-    
-    # Initialize Embedding Model
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+def extract_text_ocr(pdf_path: str) -> str:
+    images = convert_from_path(pdf_path)
+    text = []
 
-    # Process PDFs
-    if not os.path.exists(DATA_DIR):
-        print(f"Data directory {DATA_DIR} does not exist.")
+    for img in images:
+        text.append(pytesseract.image_to_string(img))
+
+    return "\n".join(text)
+
+
+def clean_text(text: str) -> str:
+    text = re.sub(r'\n{2,}', '\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return text.strip()
+
+
+def extract_text(pdf_path: str) -> str:
+    text = extract_text_pypdf(pdf_path)
+
+    # fallback heuristic
+    if len(text.strip()) < 300:
+        print(f"[OCR fallback] {pdf_path}")
+        text = extract_text_ocr(pdf_path)
+
+    return clean_text(text)
+
+
+# ------------- CHUNKING -----------------
+
+def chunk_text(text: str):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=80
+    )
+    return splitter.split_text(text)
+
+
+# ------------- INGEST -------------------
+
+def ingest_pdf(pdf_path: str):
+    print(f"Ingesting: {pdf_path}")
+
+    text = extract_text(pdf_path)
+    if not text:
+        print("❌ No text extracted, skipping")
         return
 
-    files = [f for f in os.listdir(DATA_DIR) if f.endswith('.pdf')]
-    
-    if not files:
-        print("No PDF files found.")
+    chunks = chunk_text(text)
+    if not chunks:
+        print("❌ No chunks created, skipping")
         return
 
-    for file in files:
-        file_path = os.path.join(DATA_DIR, file)
-        print(f"Processing {file}...")
-        
-        text = extract_text_from_pdf(file_path)
-        chunks = split_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
-        
-        if not chunks:
-            continue
+    embeddings = embedder.encode(chunks).tolist()
+    ids = [f"{os.path.basename(pdf_path)}_{i}" for i in range(len(chunks))]
 
-        print(f"Generated {len(chunks)} chunks.")
-        
-        embeddings = model.encode(chunks).tolist()
-        ids = [f"{file}_{i}" for i in range(len(chunks))]
-        metadatas = [{"source": file} for _ in range(len(chunks))]
+    collection.add(
+        documents=chunks,
+        embeddings=embeddings,
+        ids=ids,
+        metadatas=[{"source": pdf_path}] * len(chunks)
+    )
 
-        collection.add(
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=metadatas,
-            ids=ids
-        )
-        print(f"Added {len(chunks)} chunks to ChromaDB.")
+    print(f"✅ Added {len(chunks)} chunks")
 
-    print("Ingestion complete.")
 
 if __name__ == "__main__":
-    ingest_data()
+    ingest_pdf("data/sample_hr_policy.pdf")
+    print("Total vectors in DB:", collection.count())
