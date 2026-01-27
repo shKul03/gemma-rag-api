@@ -6,4 +6,8 @@ sentence-transformers==2.3.1
 pypdf==4.0.1
 python-multipart==0.0.6
 numpy<2.0
+langchain-text-splitters
+pytesseract
+pdf2image
+pillow
 

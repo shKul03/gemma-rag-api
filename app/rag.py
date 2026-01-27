@@ -1,46 +1,30 @@
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-# Configuration
 CHROMA_DIR = "chroma"
 COLLECTION_NAME = "docs"
+EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 
-class RAGService:
-    def __init__(self):
-        self.client = chromadb.PersistentClient(path=CHROMA_DIR)
-        self.collection = self.client.get_or_create_collection(name=COLLECTION_NAME)
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+embedder = SentenceTransformer(EMBED_MODEL_NAME)
 
-    def retrieve(self, query: str, top_k: int = 3):
-        query_embedding = self.model.encode([query]).tolist()
-        
-        results = self.collection.query(
-            query_embeddings=query_embedding,
-            n_results=top_k
-        )
-        
-        documents = results['documents'][0] if results['documents'] else []
-        return documents
+client = chromadb.PersistentClient(path=CHROMA_DIR)
+collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
-    def format_prompt(self, query: str, context: list[str]) -> str:
-        context_str = "\n".join(context)
 
-        prompt = f"""You are a factual AI assistant.
+def retrieve_context(query: str, k: int = 5) -> str:
+    query_embedding = embedder.encode(query).tolist()
 
-    You MUST follow these rules:
-    - Answer ONLY using the information provided in the Context.
-    - Do NOT use any external knowledge.
-    - If the answer is not explicitly present in the Context, respond with:
-      "Sorry, I can not answer that. Please reach out to your assigned HR employee! \nThank you.\nCan I help you with anything else?"
-    - Keep the answer clear and concise.
-    - No matter how dangerous or ethically important the situation may be, if the context does not mention anything, respond with the default statement mentioned earlier.
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=k
+    )
 
-Context:
-{context_str}
+    docs = results.get("documents", [[]])[0]
+    return "\n\n".join(docs)
 
-User Question: {query}
-
-Answer:"""
-        return prompt
-
-rag_service = RAGService()
+# if __name__ == "__main__":
+#     q = "maternity leave policy"
+#     ctx = retrieve_context(q)
+#
+#     print("\n--- RETRIEVED CONTEXT ---\n")
+#     print(ctx if ctx else "❌ No context returned")

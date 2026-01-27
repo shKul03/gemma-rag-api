@@ -1,0 +1,9 @@
+Client question
+   ↓
+retrieve_context()
+   ↓
+format HR-safe prompt
+   ↓
+call_phi3()
+   ↓
+return answer
