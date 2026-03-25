@@ -1,0 +1,35 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: hr_elasticsearch
+    environment:
+      # Run as single node (not a cluster)
+      - discovery.type=single-node
+      # Disable security for local development (enable in production!)
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      # Memory settings
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Disable machine learning (not needed)
+      - xpack.ml.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      # Persist data
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - hr_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  es_data:
+    driver: local
+
+networks:
+  hr_network:
+    driver: bridge
