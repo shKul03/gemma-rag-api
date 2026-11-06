@@ -1,84 +1,103 @@
-from fastapi import FastAPI, Body, HTTPException
-import requests
 import logging
-from app.rag import retrieve_context
+import os
+import time
+from collections import defaultdict, deque
 
-# --------------- Loggers ---------------
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-logger = logging.getLogger('ShlokaLogsLoL')
+import requests
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
-# ---------------- APP ----------------
+from app import config, llm, rag
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger("bakarwadi")
 
-# ---------------- OLLAMA CONFIG ----------------
+app = FastAPI(title="Bakarwadi", description="HR-policy RAG assistant")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "phi3:mini"
+NOT_FOUND = "NOT FOUND IN CONTEXT"
 
-# ---------------- LLM CALL ----------------
+_hits: dict[str, deque] = defaultdict(deque)
 
-def call_phi3(prompt: str) -> str:
-    logger.info(f"Calling SLM {MODEL_NAME} using Ollama")
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": prompt,
-        "stream": False
-    }
 
-    response = requests.post(OLLAMA_URL, json=payload)
-    response.raise_for_status()
+def _rate_limited(request: Request) -> bool:
+    if config.RATE_LIMIT_PER_MIN <= 0:
+        return False
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    now = time.monotonic()
+    q = _hits[ip]
+    while q and now - q[0] > 60:
+        q.popleft()
+    if not q:
+        _hits.pop(ip, None)
+        q = _hits[ip]
+    if len(q) >= config.RATE_LIMIT_PER_MIN:
+        return True
+    q.append(now)
+    return False
 
-    result = response.json()
-    logger.info(f"Received response from {MODEL_NAME}")
-    return result.get("response", "").strip()
-
-# ---------------- API ----------------
-
-@app.post("/ask")
-def ask(question: str = Body(..., embed=True)):
-    if question:
-        logger.info(f"Received ASK request")
-    else:
-        logger.warning("Question parameter is None type")
-        return {"answer": "Enter Non-Null Question"}
-    try:
-        # Retrieve RAG context
-        context = retrieve_context(question)
-        logger.info("Context received")
-
-        if not context.strip():
-            logger.warning(f"No context received: {context}")
-            return {"answer": "NOT FOUND IN CONTEXT"}
-
-        # Build grounded prompt
-        prompt = f"""
-You are an HR policy assistant.
+SYSTEM_PROMPT = f"""You are Bakarwadi, an HR policy assistant.
 
 STRICT RULES:
-- Answer ONLY using the context below.
-- If the answer is not present, reply exactly: NOT FOUND IN CONTEXT.
+- Answer ONLY using the context provided by the user message.
+- If the answer is not present, reply exactly: {NOT_FOUND}
 - Do not use outside knowledge.
-- Do not guess.
-- Your name is Bakarwadi
+- Do not guess."""
 
-Context:
-{context}
 
-Question:
-{question}
-"""
+@app.get("/")
+def root():
+    return {"name": "Bakarwadi", "status": "ok", "endpoints": ["POST /ask", "GET /health"]}
 
-        # Call Phi-3 via Ollama
-        answer = call_phi3(prompt)
-
-        return {"answer": answer}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ---------------- HEALTH CHECK ----------------
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/ask")
+def ask(request: Request, question: str = Body(..., embed=True)):
+    if _rate_limited(request):
+        raise HTTPException(status_code=429, detail="Too many requests, slow down.")
+    question = (question or "").strip()
+    if not question:
+        return {"answer": "Enter Non-Null Question"}
+    if len(question) > config.MAX_QUESTION_CHARS:
+        raise HTTPException(status_code=400, detail=f"Question too long (max {config.MAX_QUESTION_CHARS} characters)")
+
+    try:
+        hits = rag.retrieve(question)
+    except FileNotFoundError:
+        logger.exception("Index missing")
+        raise HTTPException(status_code=500, detail="Knowledge index not found. Run `python -m app.ingest` and redeploy.")
+
+    if not hits or hits[0]["score"] < config.MIN_SCORE:
+        logger.info("No relevant context (best score %.3f)", hits[0]["score"] if hits else 0.0)
+        return {"answer": NOT_FOUND, "sources": []}
+
+    context = "\n\n".join(h["text"] for h in hits)
+    user_msg = f"Context:\n{context}\n\nQuestion:\n{question}"
+
+    try:
+        answer = llm.chat(SYSTEM_PROMPT, user_msg)
+    except llm.LLMNotConfigured:
+        logger.error("LLM API key not configured")
+        raise HTTPException(status_code=503, detail="Model is not configured on the server.")
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else 0
+        logger.error("LLM provider returned %s", status)
+        if status == 429:
+            raise HTTPException(status_code=429, detail="Model rate limit reached, try again in a minute.")
+        raise HTTPException(status_code=502, detail="The model provider returned an error.")
+    except requests.RequestException:
+        logger.exception("LLM request failed")
+        raise HTTPException(status_code=502, detail="Could not reach the model provider.")
+
+    sources = sorted({os.path.basename(h["source"]) for h in hits})
+    return {"answer": answer, "sources": sources}

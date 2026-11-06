@@ -1,30 +1,31 @@
-import chromadb
-from sentence_transformers import SentenceTransformer
+import json
 
-CHROMA_DIR = "chroma"
-COLLECTION_NAME = "docs"
-EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
+import numpy as np
 
-embedder = SentenceTransformer(EMBED_MODEL_NAME)
+from app import config
+from app import embed as embed_mod
 
-client = chromadb.PersistentClient(path=CHROMA_DIR)
-collection = client.get_or_create_collection(name=COLLECTION_NAME)
+_index = None
 
 
-def retrieve_context(query: str, k: int = 5) -> str:
-    query_embedding = embedder.encode(query).tolist()
+def _load():
+    global _index
+    if _index is None:
+        emb = np.load(config.INDEX_DIR / "embeddings.npy")
+        chunks = json.loads((config.INDEX_DIR / "chunks.json").read_text(encoding="utf-8"))
+        if len(chunks) != emb.shape[0]:
+            raise RuntimeError("Index is corrupt: chunk count does not match embeddings")
+        _index = (emb, chunks)
+    return _index
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=k
-    )
 
-    docs = results.get("documents", [[]])[0]
-    return "\n\n".join(docs)
-
-# if __name__ == "__main__":
-#     q = "maternity leave policy"
-#     ctx = retrieve_context(q)
-#
-#     print("\n--- RETRIEVED CONTEXT ---\n")
-#     print(ctx if ctx else "❌ No context returned")
+def retrieve(query: str, k: int | None = None) -> list[dict]:
+    """Top-k chunks by cosine similarity (vectors are pre-normalised, so a dot product)."""
+    emb, chunks = _load()
+    q = embed_mod.embed([query])[0]
+    scores = emb @ q
+    top = np.argsort(-scores)[: (k or config.TOP_K)]
+    return [
+        {"text": chunks[i]["text"], "source": chunks[i]["source"], "score": float(scores[i])}
+        for i in top
+    ]

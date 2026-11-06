@@ -1,9 +1,9 @@
 Client question
    ↓
-retrieve_context()
+rag.retrieve()        embed question (MiniLM, ONNX) → cosine search over index/
    ↓
-format HR-safe prompt
+build HR-safe prompt  (answer only from context, else NOT FOUND IN CONTEXT)
    ↓
-call_phi3()
+llm.chat()            Groq, OpenAI-compatible endpoint
    ↓
-return answer
+return answer + sources

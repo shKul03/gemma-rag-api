@@ -1,13 +1,4 @@
-fastapi==0.109.0
-uvicorn==0.27.0
-requests==2.31.0
-chromadb==0.4.22
-sentence-transformers==2.3.1
-pypdf==4.0.1
-python-multipart==0.0.6
-numpy<2.0
-langchain-text-splitters
-pytesseract
-pdf2image
-pillow
-
+fastapi>=0.117.1
+requests>=2.31
+numpy
+fastembed>=0.7
