@@ -22,8 +22,17 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
+# Serverless filesystems are read-only except /tmp; keep every download cache there.
+_tmp = tempfile.gettempdir()
+os.environ.setdefault("HF_HOME", os.path.join(_tmp, "hf"))
+os.environ.setdefault("XDG_CACHE_HOME", os.path.join(_tmp, "cache"))
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 # Prebuilt vector index (created by `python -m app.ingest`, committed to the repo)
 INDEX_DIR = Path(os.getenv("INDEX_DIR", ROOT / "index"))
+
+# Bundled copy of the embedding model (used if present, otherwise downloaded).
+MODEL_DIR = Path(os.getenv("MODEL_DIR", ROOT / "model"))
 
 # Embeddings run locally through ONNX (no torch). Must match the model used at ingest time.
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
