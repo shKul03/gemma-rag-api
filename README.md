@@ -4,6 +4,8 @@ A small HR-policy assistant. Ask a question, it finds the relevant passages in y
 
 FastAPI · Groq (open models) · MiniLM embeddings via ONNX · prebuilt vector index · deploys on Vercel.
 
+**Live:** https://bakarwadi.vercel.app (`GET /health`, `POST /ask`). The first request after idle takes about 8 seconds (cold start, model loads from the bundled `model/` folder); warm requests take 2 to 3 seconds. `/ask` is limited to 10 requests per minute per IP.
+
 ## API
 
 | Method | Path | Body | Returns |
